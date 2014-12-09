@@ -3,7 +3,8 @@ source "http://rubygems.org"
 # Example:
 #   gem "activesupport", ">= 2.3.5"
 
-gem "thread_queues", path: "/home/kaspernj/Dev/Ruby/thread_queues"
+gem "thread_queues", "~> 0.0.3" #path: "/home/kaspernj/Dev/Ruby/thread_queues"
+gem "codeclimate-test-reporter", group: :test, require: nil
 
 # Add dependencies to develop your gem here.
 # Include everything needed to run rake, tests, features, etc.
