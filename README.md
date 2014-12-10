@@ -1,3 +1,7 @@
+[![Build Status](https://api.shippable.com/projects/54874decd46935d5fbbfc24f/badge?branchName=master)](https://app.shippable.com/projects/54874decd46935d5fbbfc24f/builds/latest)
+[![Code Climate](https://codeclimate.com/github/kaspernj/json_streamer/badges/gpa.svg)](https://codeclimate.com/github/kaspernj/json_streamer)
+[![Test Coverage](https://codeclimate.com/github/kaspernj/json_streamer/badges/coverage.svg)](https://codeclimate.com/github/kaspernj/json_streamer)
+
 # JsonStreamer
 
 Stream huge JSON files in Ruby for JSON based frameworks.
