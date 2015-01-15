@@ -1,15 +1,31 @@
 require "thread_queues"
 
 class JsonStreamer
-  ESCAPED_VALUES = %w(t n " r)
+  # Autoload found sub-constants
+  def self.const_missing(name)
+    path = "#{File.dirname(__FILE__)}/json_streamer/#{StringCases.camel_to_snake(name)}.rb"
+
+    if File.exists?(path)
+      require path
+      return JsonStreamer.const_get(name)
+    end
+
+    super
+  end
+
+  attr_reader :indent, :state
+
+  ESCAPED_VALUES = ["t", "n", "\"", "r"]
 
   def initialize(reader)
     @reader = reader
+    @reader.streamer = self
     @queue = ThreadQueues::BufferedQueue.new(25)
     @string_buffer = ThreadQueues::StringBuffer.new(@queue)
     @buffer = ""
     @objects = []
     @closed = false
+    @indent = 0
 
     @parse_thread = Thread.new do
       Thread.current.abort_on_exception = true
@@ -36,39 +52,44 @@ private
     parse_new_object
   end
 
-  def detect_hash_result(args)
-    if @detect_hash_result
-      if args[:value_type]
-        @reader.on_key_dynamic_value_for_hash(@detect_hash_result[:key_result][:value], args[:value_type])
-      elsif args[:value]
-        @reader.on_key_value_for_hash(@detect_hash_result[:key_result][:value], args[:value])
+  def detect_result(args)
+    if args[:value_type]
+      if @detect_hash_result
+        @reader.send_event(:on_key_dynamic_value_for_hash, @detect_hash_result[:key_result][:value], args[:value_type])
+        @detect_hash_result = nil
+      elsif @detect_type_array && args[:value_type]
+        @reader.send_event(:on_array_dynamic_value, args[:value_type])
+        @detect_type_array = nil
       end
-
+    elsif args[:value] && @detect_hash_result
+      @reader.send_event(:on_key_value_for_hash, @detect_hash_result[:key_result][:value], args[:value])
       @detect_hash_result = nil
     end
   end
 
   def parse_new_object
     if regex(/\A\s*{/)
-      detect_hash_result(value_type: :hash)
+      @state = :reading_hash
+      detect_result(value_type: :hash)
       on_hash
       result = {type: :hash}
     elsif regex(/\A\s*\[/)
-      detect_hash_result(value_type: :array)
+      @state = :reading_array
+      detect_result(value_type: :array)
       on_array
       result = {type: :array}
     elsif regex(/\A\s*"/)
       string_value = on_string
-      detect_hash_result(value: string_value)
+      detect_result(value: string_value)
       result = {type: :string, value: string_value}
-    elsif match = regex(/\A\s*([\d,]+([\.\d]*|))\s*/)
+    elsif match = regex(/\A\s*(\d+([\.\d]*|))\s*/)
       if match[2].empty?
         result = {type: :integer, value: match[0].to_i}
       else
         result = {type: :float, value: match[0].to_f}
       end
 
-      detect_hash_result(value: result[:value])
+      detect_result(value: result[:value])
     else
       raise "Didnt know how to parse: #{@buffer}"
     end
@@ -77,24 +98,34 @@ private
   end
 
   def on_array
-    @reader.on_begin_array
+    @reader.send_event(:on_begin_array)
+    @indent += 1
     on_array_values
   end
 
   def on_array_values
     loop do
+      @detect_type_array = true
       result = parse_new_object
+      @detect_type_array = nil
+
+      if result[:value]
+        @reader.send_event(:on_array_value, result[:value])
+      end
 
       if regex(/\A\s*,/)
         # Continue reading array values.
       elsif regex(/\A\s*\]/)
+        @indent -= 1
+        @reader.send_event(:on_end_array)
         break
       end
     end
   end
 
   def on_hash
-    @reader.on_begin_hash
+    @reader.send_event(:on_begin_hash)
+    @indent += 1
     on_hash_pairs
   end
 
@@ -102,7 +133,6 @@ private
     str = ""
 
     loop do
-      # FIXME: Support for escaped characters.
       if match = regex(/\A([\s\S]+?)(\\(.)|")/)
         str << match[1]
 
@@ -144,7 +174,8 @@ private
       if regex(/\A\s*,/)
         # Continue loop.
       elsif regex(/\A\s*}/)
-        @reader.on_end_hash
+        @indent -= 1
+        @reader.send_event(:on_end_hash)
         break
       else
         raise "Dunno how to continue with hash from buffer: #{@buffer}"

@@ -1,7 +1,7 @@
 {
   "Results": [
-    {name: "Kasper", age: 29},
-    {"name": "Christina", age: 27},
+    {name: "Kasper", age: 29, favorite_numbers: [1, 3, {first: 1, second: 2}]},
+    {"name": "Christina", age: 27, favorite_numbers: [2, 4]},
     {name: "Name With Space", age: 5},
     {name: "Escaped \" \t \r \n Values", age: 35.0}
   ]
