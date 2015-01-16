@@ -1,34 +1,50 @@
-class ExampleReader
+class ExampleReader < JsonStreamer::BaseReader
+  attr_reader :persons
+
   def initialize(args = {})
     @results_read = false
     @reading_person = false
+    @persons = []
     @debug = args[:debug]
-    @indent = 0
   end
 
   def on_begin_array
     debug "Begin array"
-    @indent += 1
+  end
+
+  def on_array_value(value)
+    debug "ArrayValue: #{value}"
+  end
+
+  def on_array_dynamic_value(value_type)
+    debug "ArrayDynamicValue: #{value_type}"
   end
 
   def on_end_array
     debug "End array"
-    @indent -= 0
   end
 
   def on_begin_hash
     debug "Begin hash"
-    @indent += 1
+
+    if streamer.indent == 2
+      @person_reader = read_current_object
+    end
   end
 
   def on_end_hash
+    if streamer.indent == 2
+      @persons << @person_reader.result
+      @person_reader = nil
+    end
+
     if @reading_person && @on_person
       @on_person.call(@person)
       @person = nil
       @reading_person = false
     end
 
-    @indent -= 0
+    debug "End hash"
   end
 
   def on_person(&blk)
@@ -36,13 +52,13 @@ class ExampleReader
   end
 
   def on_key_value_for_hash(key, value)
-    debug "HashKeyValue: #{key}: #{value}"
+    debug "HashKeyValue(#{streamer.indent}): #{key}: #{value}"
 
     if key == "name"
       @reading_person = true
-      @person = {name: value}
+      @person = {"name" => value}
     elsif @reading_person && key == "age"
-      @person[:age] = value
+      @person["age"] = value
     end
   end
 
@@ -58,10 +74,10 @@ private
 
   def debug(message)
     indent_str = ""
-    @indent.times do
+    streamer.indent.times do
       indent_str << "  "
     end
 
-    print "#{indent_str}#{message}\n" if @debug
+    print "(#{streamer.indent}) #{indent_str}#{message}\n" if @debug
   end
 end
